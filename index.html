@@ -1,0 +1,901 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CSV グラフ ジェネレーター</title>
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    /* ===== リセット & ベース ===== */
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Sans",
+                   "Hiragino Kaku Gothic ProN", Meiryo, sans-serif;
+      background: #F8FAFC;
+      color: #1E293B;
+      min-height: 100vh;
+      padding: 24px 16px;
+    }
+
+    /* ===== ヘッダー ===== */
+    .app-header {
+      text-align: center;
+      margin-bottom: 32px;
+    }
+
+    .app-header h1 {
+      font-size: clamp(1.4rem, 4vw, 2rem);
+      font-weight: 700;
+      color: #1E293B;
+      letter-spacing: -0.02em;
+    }
+
+    .app-header p {
+      margin-top: 8px;
+      font-size: 0.9rem;
+      color: #64748B;
+    }
+
+    /* ===== カード共通 ===== */
+    .card {
+      background: #FFFFFF;
+      border-radius: 12px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.05);
+      padding: 24px;
+      margin-bottom: 24px;
+    }
+
+    .card-title {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #64748B;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 16px;
+    }
+
+    /* ===== レイアウト ===== */
+    .container {
+      max-width: 960px;
+      margin: 0 auto;
+    }
+
+    /* ===== ドラッグ＆ドロップエリア ===== */
+    #drop-zone {
+      border: 2.5px dashed #93C5FD;
+      border-radius: 12px;
+      background: #EFF6FF;
+      padding: 48px 24px;
+      text-align: center;
+      cursor: pointer;
+      transition: background 0.2s, border-color 0.2s;
+      position: relative;
+    }
+
+    #drop-zone:hover,
+    #drop-zone.dragover {
+      background: #DBEAFE;
+      border-color: #3B82F6;
+    }
+
+    #drop-zone.dragover {
+      transform: scale(1.01);
+    }
+
+    .drop-icon {
+      font-size: 2.5rem;
+      margin-bottom: 12px;
+      display: block;
+      user-select: none;
+    }
+
+    .drop-text {
+      font-size: 1rem;
+      font-weight: 600;
+      color: #2563EB;
+      margin-bottom: 6px;
+    }
+
+    .drop-sub {
+      font-size: 0.82rem;
+      color: #64748B;
+      margin-bottom: 18px;
+    }
+
+    /* ===== ボタン ===== */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 9px 20px;
+      border-radius: 8px;
+      font-size: 0.875rem;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      transition: background 0.15s, transform 0.1s, box-shadow 0.15s;
+      text-decoration: none;
+    }
+
+    .btn:active { transform: scale(0.97); }
+
+    .btn-primary {
+      background: #3B82F6;
+      color: #fff;
+    }
+
+    .btn-primary:hover { background: #2563EB; box-shadow: 0 2px 8px rgba(59,130,246,0.4); }
+
+    .btn-secondary {
+      background: #F1F5F9;
+      color: #475569;
+    }
+
+    .btn-secondary:hover { background: #E2E8F0; }
+
+    .btn-success {
+      background: #10B981;
+      color: #fff;
+    }
+
+    .btn-success:hover { background: #059669; }
+
+    /* ===== ファイル選択（hidden input） ===== */
+    #file-input { display: none; }
+
+    /* ===== 読み込み済みファイル名表示 ===== */
+    #file-info {
+      display: none;
+      align-items: center;
+      gap: 8px;
+      margin-top: 12px;
+      font-size: 0.85rem;
+      color: #16A34A;
+      font-weight: 500;
+    }
+
+    /* ===== エラーメッセージ ===== */
+    .error-msg {
+      display: none;
+      margin-top: 10px;
+      padding: 10px 14px;
+      background: #FEF2F2;
+      color: #DC2626;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      border-left: 3px solid #DC2626;
+    }
+
+    /* ===== プレビューテーブル ===== */
+    #preview-section { display: none; }
+
+    .table-wrap {
+      overflow-x: auto;
+      border-radius: 8px;
+      border: 1px solid #E2E8F0;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.82rem;
+    }
+
+    thead th {
+      background: #F8FAFC;
+      color: #475569;
+      font-weight: 600;
+      padding: 10px 14px;
+      text-align: left;
+      border-bottom: 1px solid #E2E8F0;
+      white-space: nowrap;
+    }
+
+    tbody td {
+      padding: 8px 14px;
+      border-bottom: 1px solid #F1F5F9;
+      color: #334155;
+      white-space: nowrap;
+    }
+
+    tbody tr:last-child td { border-bottom: none; }
+    tbody tr:hover td { background: #F8FAFC; }
+
+    .badge-excluded {
+      display: inline-block;
+      font-size: 0.7rem;
+      background: #FEF3C7;
+      color: #92400E;
+      border-radius: 4px;
+      padding: 1px 6px;
+      margin-left: 4px;
+      vertical-align: middle;
+    }
+
+    /* ===== グラフセクション ===== */
+    #chart-section { display: none; }
+
+    /* ===== コントロール行 ===== */
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      align-items: flex-end;
+      margin-bottom: 20px;
+    }
+
+    .control-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .control-group label {
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: #64748B;
+    }
+
+    /* グラフ種類タブ */
+    .chart-type-tabs {
+      display: flex;
+      gap: 4px;
+      background: #F1F5F9;
+      border-radius: 8px;
+      padding: 4px;
+    }
+
+    .tab-btn {
+      padding: 7px 14px;
+      border-radius: 6px;
+      border: none;
+      background: transparent;
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: #64748B;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+      white-space: nowrap;
+    }
+
+    .tab-btn.active {
+      background: #ffffff;
+      color: #3B82F6;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+
+    /* タイトル入力 */
+    .title-input {
+      padding: 8px 12px;
+      border: 1.5px solid #E2E8F0;
+      border-radius: 8px;
+      font-size: 0.875rem;
+      color: #1E293B;
+      background: #fff;
+      outline: none;
+      transition: border-color 0.15s, box-shadow 0.15s;
+      min-width: 200px;
+      font-family: inherit;
+    }
+
+    .title-input:focus {
+      border-color: #3B82F6;
+      box-shadow: 0 0 0 3px rgba(59,130,246,0.15);
+    }
+
+    /* ===== グラフキャンバス ===== */
+    .chart-container {
+      position: relative;
+      min-width: 0;
+      width: 100%;
+      min-height: 400px;
+    }
+
+    #myChart {
+      width: 100% !important;
+      max-height: 500px;
+    }
+
+    /* ===== ダウンロードボタン行 ===== */
+    .chart-actions {
+      display: flex;
+      justify-content: flex-end;
+      margin-top: 16px;
+    }
+
+    /* ===== フッター ===== */
+    .app-footer {
+      text-align: center;
+      font-size: 0.78rem;
+      color: #94A3B8;
+      margin-top: 8px;
+    }
+
+    /* ===== レスポンシブ ===== */
+    @media (max-width: 600px) {
+      .controls {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+
+      .title-input {
+        width: 100%;
+        min-width: unset;
+      }
+
+      #drop-zone {
+        padding: 32px 16px;
+      }
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+
+  <!-- ===== ヘッダー ===== -->
+  <header class="app-header">
+    <h1>📊 CSV グラフ ジェネレーター</h1>
+    <p>CSVファイルをアップロードするだけで、棒グラフ・折れ線グラフ・円グラフを自動生成します</p>
+  </header>
+
+  <!-- ===== アップロードカード ===== -->
+  <div class="card">
+    <div class="card-title">ファイルをアップロード</div>
+
+    <!-- ドラッグ＆ドロップエリア -->
+    <div id="drop-zone" role="button" tabindex="0" aria-label="CSVファイルをドラッグ＆ドロップ">
+      <span class="drop-icon">📂</span>
+      <p class="drop-text">ここにCSVファイルをドラッグ＆ドロップ</p>
+      <p class="drop-sub">または</p>
+      <button class="btn btn-primary" onclick="document.getElementById('file-input').click(); event.stopPropagation();">
+        📁 ファイルを選択
+      </button>
+      <input type="file" id="file-input" accept=".csv,text/csv" />
+    </div>
+
+    <!-- ファイル読み込み後の表示 -->
+    <div id="file-info">
+      <span>✅</span>
+      <span id="file-name-label"></span>
+    </div>
+
+    <!-- エラー表示 -->
+    <div class="error-msg" id="error-msg"></div>
+  </div>
+
+  <!-- ===== データプレビューカード ===== -->
+  <div class="card" id="preview-section">
+    <div class="card-title">データプレビュー <span id="preview-row-count" style="font-weight:400;text-transform:none;letter-spacing:0;"></span></div>
+    <div class="table-wrap">
+      <table id="preview-table">
+        <thead id="preview-thead"></thead>
+        <tbody id="preview-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ===== グラフカード ===== -->
+  <div class="card" id="chart-section">
+    <div class="card-title">グラフ</div>
+
+    <!-- コントロール -->
+    <div class="controls">
+      <!-- グラフ種類切り替えタブ -->
+      <div class="control-group">
+        <label>グラフの種類</label>
+        <div class="chart-type-tabs" role="tablist">
+          <button class="tab-btn active" data-type="bar"   role="tab" aria-selected="true">📊 棒グラフ</button>
+          <button class="tab-btn"        data-type="line"  role="tab" aria-selected="false">📈 折れ線</button>
+          <button class="tab-btn"        data-type="pie"   role="tab" aria-selected="false">🥧 円グラフ</button>
+        </div>
+      </div>
+
+      <!-- タイトル入力 -->
+      <div class="control-group" style="flex:1; min-width:200px;">
+        <label for="chart-title-input">グラフのタイトル</label>
+        <input
+          type="text"
+          id="chart-title-input"
+          class="title-input"
+          placeholder="タイトルを入力..."
+          value="データグラフ"
+        />
+      </div>
+    </div>
+
+    <!-- グラフ描画エリア -->
+    <div class="chart-container">
+      <canvas id="myChart"></canvas>
+    </div>
+
+    <!-- ダウンロードボタン -->
+    <div class="chart-actions">
+      <button class="btn btn-success" id="download-btn">
+        ⬇️ PNG でダウンロード
+      </button>
+    </div>
+  </div>
+
+  <footer class="app-footer">
+    サーバーへのデータ送信なし・完全ブラウザ処理 ・ Chart.js 4.4
+  </footer>
+
+</div><!-- /.container -->
+
+<script>
+  "use strict";
+
+  // ===== グローバル状態 =====
+  let chartInstance = null;   // Chart.js インスタンス（再描画時に破棄する）
+  let currentChartType = "bar"; // 現在選択中のグラフ種類
+  let parsedData = null;      // { labels, datasets: [{label, data}] }
+
+  // カラーパレット（複数データ系列に対応）
+  const COLOR_PALETTE = [
+    "#3B82F6", "#10B981", "#F59E0B", "#EF4444",
+    "#8B5CF6", "#06B6D4", "#EC4899", "#84CC16",
+  ];
+
+  // ===== DOM 参照 =====
+  const dropZone        = document.getElementById("drop-zone");
+  const fileInput       = document.getElementById("file-input");
+  const fileInfo        = document.getElementById("file-info");
+  const fileNameLabel   = document.getElementById("file-name-label");
+  const errorMsg        = document.getElementById("error-msg");
+  const previewSection  = document.getElementById("preview-section");
+  const chartSection    = document.getElementById("chart-section");
+  const previewThead    = document.getElementById("preview-thead");
+  const previewTbody    = document.getElementById("preview-tbody");
+  const previewRowCount = document.getElementById("preview-row-count");
+  const chartTitleInput = document.getElementById("chart-title-input");
+  const downloadBtn     = document.getElementById("download-btn");
+  const tabButtons      = document.querySelectorAll(".tab-btn");
+
+  // ===== ドラッグ＆ドロップ イベント =====
+  dropZone.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    dropZone.classList.add("dragover");
+  });
+
+  dropZone.addEventListener("dragleave", () => {
+    dropZone.classList.remove("dragover");
+  });
+
+  dropZone.addEventListener("drop", (e) => {
+    e.preventDefault();
+    dropZone.classList.remove("dragover");
+    const file = e.dataTransfer.files[0];
+    if (file) handleFile(file);
+  });
+
+  // キーボードでもアクセスできるようにする
+  dropZone.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") {
+      fileInput.click();
+    }
+  });
+
+  // ファイル選択ボタン経由
+  fileInput.addEventListener("change", () => {
+    if (fileInput.files[0]) handleFile(fileInput.files[0]);
+  });
+
+  // ===== グラフ種類タブ切り替え =====
+  tabButtons.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      // アクティブ状態を更新
+      tabButtons.forEach((b) => {
+        b.classList.remove("active");
+        b.setAttribute("aria-selected", "false");
+      });
+      btn.classList.add("active");
+      btn.setAttribute("aria-selected", "true");
+
+      currentChartType = btn.dataset.type;
+
+      // データが読み込まれていれば再描画
+      if (parsedData) renderChart();
+    });
+  });
+
+  // ===== タイトル変更 → グラフ更新 =====
+  chartTitleInput.addEventListener("input", () => {
+    if (chartInstance) {
+      chartInstance.options.plugins.title.text = chartTitleInput.value;
+      chartInstance.update();
+    }
+  });
+
+  // ===== PNG ダウンロード =====
+  downloadBtn.addEventListener("click", () => {
+    if (!chartInstance) return;
+    const canvas = document.getElementById("myChart");
+
+    // 背景を白にして PNG 出力（透過を避ける）
+    const tmpCanvas = document.createElement("canvas");
+    tmpCanvas.width  = canvas.width;
+    tmpCanvas.height = canvas.height;
+    const ctx = tmpCanvas.getContext("2d");
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, tmpCanvas.width, tmpCanvas.height);
+    ctx.drawImage(canvas, 0, 0);
+
+    const link = document.createElement("a");
+    link.download = "chart.png";
+    link.href = tmpCanvas.toDataURL("image/png");
+    link.click();
+  });
+
+  // ===== ファイル処理メイン =====
+  function handleFile(file) {
+    // CSV 拡張子チェック
+    if (!file.name.toLowerCase().endsWith(".csv")) {
+      showError("CSVファイル（.csv）を選択してください。");
+      return;
+    }
+
+    hideError();
+
+    // Shift-JIS 対応：まず UTF-8 で試み、文字化けしたら Shift-JIS で再読み込み
+    readFileWithEncoding(file, "UTF-8")
+      .then((text) => {
+        // 文字化け簡易判定（UTF-8 として読んで「?」が多い or 置換文字が含まれる場合）
+        if (hasMojibake(text)) {
+          return readFileWithEncoding(file, "Shift_JIS");
+        }
+        return text;
+      })
+      .then((text) => {
+        processCSV(text);
+        fileNameLabel.textContent = `${file.name}（${formatBytes(file.size)}）`;
+        fileInfo.style.display = "flex";
+      })
+      .catch(() => {
+        showError("ファイルの読み込みに失敗しました。");
+      });
+  }
+
+  // 指定エンコーディングでファイルを読む（Promise）
+  function readFileWithEncoding(file, encoding) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => resolve(e.target.result);
+      reader.onerror = reject;
+      reader.readAsText(file, encoding);
+    });
+  }
+
+  // 簡易文字化け判定（UTF-8 置換文字 U+FFFD が含まれるか）
+  function hasMojibake(text) {
+    return text.includes("\uFFFD");
+  }
+
+  // ===== CSV パース & 表示 =====
+  function processCSV(text) {
+    // BOM 除去
+    const bom = "\uFEFF";
+    if (text.startsWith(bom)) text = text.slice(1);
+
+    const rows = parseCSV(text);
+
+    if (rows.length < 2) {
+      showError("データが不足しています。ヘッダー行と1行以上のデータが必要です。");
+      return;
+    }
+
+    const headers = rows[0];       // 1行目 = ヘッダー
+    const dataRows = rows.slice(1).filter((r) => r.some((c) => c !== "")); // 空行除去
+
+    if (headers.length < 2) {
+      showError("列が2列以上必要です（1列目：ラベル、2列目以降：数値データ）。");
+      return;
+    }
+
+    // ===== 数値列の判定 =====
+    // 各列（2列目以降）について、データ行の値が全て数値か確認
+    const colInfo = headers.slice(1).map((header, colIdx) => {
+      const values = dataRows.map((row) => row[colIdx + 1] ?? "");
+      const nums   = values.map((v) => parseFloat(v.replace(/,/g, ""))); // カンマ区切り数値対応
+      const isNumeric = nums.every((n) => !isNaN(n));
+      return { header, values: nums, isNumeric };
+    });
+
+    const numericCols    = colInfo.filter((c) => c.isNumeric);
+    const excludedCols   = colInfo.filter((c) => !c.isNumeric);
+
+    if (numericCols.length === 0) {
+      showError("数値データの列が見つかりません。2列目以降に数値データが必要です。");
+      return;
+    }
+
+    // ===== プレビューテーブル生成 =====
+    buildPreviewTable(headers, dataRows, colInfo);
+
+    // ===== グラフ用データ構造 =====
+    const labels = dataRows.map((row) => row[0] ?? "");
+    parsedData = {
+      labels,
+      datasets: numericCols.map((col, i) => ({
+        label: col.header,
+        data: col.values,
+        color: COLOR_PALETTE[i % COLOR_PALETTE.length],
+      })),
+    };
+
+    // グラフ表示
+    chartSection.style.display = "block";
+    renderChart();
+
+    // プレビューセクションを表示
+    previewSection.style.display = "block";
+
+    // 除外列の通知（コンソールのみ）
+    if (excludedCols.length > 0) {
+      console.info("数値以外のため除外した列:", excludedCols.map((c) => c.header));
+    }
+  }
+
+  // ===== プレビューテーブル構築 =====
+  function buildPreviewTable(headers, dataRows, colInfo) {
+    // ヘッダー行
+    const tr = document.createElement("tr");
+    headers.forEach((h, i) => {
+      const th = document.createElement("th");
+      if (i === 0) {
+        th.textContent = h;
+      } else {
+        const info = colInfo[i - 1];
+        th.textContent = h;
+        if (!info.isNumeric) {
+          const badge = document.createElement("span");
+          badge.className = "badge-excluded";
+          badge.textContent = "除外";
+          th.appendChild(badge);
+        }
+      }
+      tr.appendChild(th);
+    });
+    previewThead.innerHTML = "";
+    previewThead.appendChild(tr);
+
+    // データ行（最大 10 行プレビュー）
+    const PREVIEW_LIMIT = 10;
+    const displayRows = dataRows.slice(0, PREVIEW_LIMIT);
+    previewTbody.innerHTML = "";
+    displayRows.forEach((row) => {
+      const dr = document.createElement("tr");
+      headers.forEach((_, i) => {
+        const td = document.createElement("td");
+        td.textContent = row[i] ?? "";
+        dr.appendChild(td);
+      });
+      previewTbody.appendChild(dr);
+    });
+
+    // 行数表示
+    const total = dataRows.length;
+    previewRowCount.textContent =
+      total > PREVIEW_LIMIT
+        ? `（${total} 行中 ${PREVIEW_LIMIT} 行を表示）`
+        : `（全 ${total} 行）`;
+  }
+
+  // ===== Chart.js グラフ描画 =====
+  function renderChart() {
+    if (!parsedData) return;
+
+    const canvas = document.getElementById("myChart");
+    const title  = chartTitleInput.value;
+    const type   = currentChartType;
+
+    // 既存グラフを破棄
+    if (chartInstance) {
+      chartInstance.destroy();
+      chartInstance = null;
+    }
+
+    // 共通のカラー設定ビルダー
+    function buildDatasets() {
+      return parsedData.datasets.map((ds) => {
+        const base = {
+          label: ds.label,
+          data: ds.data,
+        };
+
+        if (type === "bar") {
+          return {
+            ...base,
+            backgroundColor: ds.color + "CC", // 80% 透明度
+            borderColor: ds.color,
+            borderWidth: 1.5,
+            borderRadius: 4,
+          };
+        } else if (type === "line") {
+          return {
+            ...base,
+            backgroundColor: ds.color + "22",
+            borderColor: ds.color,
+            borderWidth: 2.5,
+            pointBackgroundColor: ds.color,
+            pointRadius: 4,
+            pointHoverRadius: 6,
+            tension: 0.3,
+            fill: true,
+          };
+        } else {
+          // 円グラフ：全データポイントに色を割り当て
+          return {
+            ...base,
+            backgroundColor: parsedData.labels.map(
+              (_, i) => COLOR_PALETTE[i % COLOR_PALETTE.length] + "CC"
+            ),
+            borderColor: parsedData.labels.map(
+              (_, i) => COLOR_PALETTE[i % COLOR_PALETTE.length]
+            ),
+            borderWidth: 2,
+          };
+        }
+      });
+    }
+
+    // 円グラフは最初のデータ系列のみ使用
+    const datasets =
+      type === "pie"
+        ? [buildDatasets()[0]]
+        : buildDatasets();
+
+    const chartData = {
+      labels: parsedData.labels,
+      datasets,
+    };
+
+    // グラフオプション
+    const isPie = type === "pie";
+    const options = {
+      responsive: true,
+      maintainAspectRatio: true,
+      aspectRatio: 1.7,
+      animation: {
+        duration: 400,
+        easing: "easeOutQuart",
+      },
+      plugins: {
+        title: {
+          display: true,
+          text: title,
+          font: { size: 16, weight: "bold", family: "inherit" },
+          color: "#1E293B",
+          padding: { bottom: 16 },
+        },
+        legend: {
+          display: isPie || parsedData.datasets.length > 1,
+          position: isPie ? "right" : "top",
+          labels: {
+            font: { size: 12, family: "inherit" },
+            color: "#475569",
+            boxWidth: 14,
+            padding: 16,
+          },
+        },
+        tooltip: {
+          backgroundColor: "#1E293B",
+          titleColor: "#F8FAFC",
+          bodyColor: "#CBD5E1",
+          borderColor: "#334155",
+          borderWidth: 1,
+          padding: 10,
+          titleFont: { size: 13, family: "inherit" },
+          bodyFont: { size: 12, family: "inherit" },
+        },
+      },
+      scales: isPie
+        ? {}   // 円グラフに軸は不要
+        : {
+            x: {
+              grid: { color: "#F1F5F9" },
+              ticks: {
+                color: "#64748B",
+                font: { size: 11, family: "inherit" },
+              },
+            },
+            y: {
+              grid: { color: "#F1F5F9" },
+              ticks: {
+                color: "#64748B",
+                font: { size: 11, family: "inherit" },
+              },
+              beginAtZero: true,
+            },
+          },
+    };
+
+    // Chart.js インスタンス生成
+    chartInstance = new Chart(canvas, {
+      type,
+      data: chartData,
+      options,
+    });
+  }
+
+  // ===== CSV パーサー（RFC 4180 準拠） =====
+  function parseCSV(text) {
+    const rows = [];
+    let row = [];
+    let field = "";
+    let inQuotes = false;
+    // 改行コードを統一
+    text = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+
+    for (let i = 0; i < text.length; i++) {
+      const ch = text[i];
+
+      if (inQuotes) {
+        if (ch === '"') {
+          // エスケープ（""）かチェック
+          if (text[i + 1] === '"') {
+            field += '"';
+            i++;
+          } else {
+            inQuotes = false;
+          }
+        } else {
+          field += ch;
+        }
+      } else {
+        if (ch === '"') {
+          inQuotes = true;
+        } else if (ch === ",") {
+          row.push(field.trim());
+          field = "";
+        } else if (ch === "\n") {
+          row.push(field.trim());
+          field = "";
+          rows.push(row);
+          row = [];
+        } else {
+          field += ch;
+        }
+      }
+    }
+
+    // 最終フィールド・行の処理
+    if (field !== "" || row.length > 0) {
+      row.push(field.trim());
+      rows.push(row);
+    }
+
+    // 末尾の空行を除去
+    if (rows.length && rows[rows.length - 1].every((c) => c === "")) {
+      rows.pop();
+    }
+
+    return rows;
+  }
+
+  // ===== ユーティリティ =====
+  function showError(msg) {
+    errorMsg.textContent = msg;
+    errorMsg.style.display = "block";
+    previewSection.style.display = "none";
+    chartSection.style.display = "none";
+    parsedData = null;
+  }
+
+  function hideError() {
+    errorMsg.style.display = "none";
+  }
+
+  function formatBytes(bytes) {
+    if (bytes < 1024) return bytes + " B";
+    return (bytes / 1024).toFixed(1) + " KB";
+  }
+</script>
+</body>
+</html>
